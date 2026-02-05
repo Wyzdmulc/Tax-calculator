@@ -52,7 +52,7 @@ Visit the live site here:
   Always confirm tax obligations with the **Malawi Revenue Authority (MRA)**.
 
 ## 👨‍💻 Author
-Developed by **Wisdom Lazarus Chinkondenji**  
+Developed by **wyzdmulc**  
 - Bachelor of Commerce in Banking and Finance (MUBAS)  
 - Entrepreneur in tech services, finance, and content creation  
 - Passionate about empowering communities through practical tools
