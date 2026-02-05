@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Tax Calculator</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; max-width: 760px; margin: 32px auto; padding: 0 16px; color:#111; }
+    h1 { margin-bottom: 4px; }
+    p.lead { margin-top:0; color:#444; }
+    label { display:block; margin-top:12px; font-weight:600; }
+    input[type="number"], select { width:100%; padding:8px; margin-top:6px; box-sizing:border-box; }
+    button { margin-top:14px; padding:10px 14px; font-weight:600; cursor:pointer; }
+    .results { margin-top:18px; background:#f7f7f7; padding:12px; border-radius:6px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; }
+    .col { flex:1 1 220px; min-width:180px; }
+    .line { margin:6px 0; }
+    .label { color:#333; font-weight:600; }
+    .value { color:#0b5; font-weight:700; }
+    .error { color:#b00; margin-top:8px; }
+  </style>
+</head>
+<body>
+  <h1>TAX CALCULATOR</h1>
+  <p class="lead">This program will help you calculate and pay the right amounts to customers (VAT, PPDA, NCIC, Tourism Levy and WHT).</p>
+
+  <label for="invoice">Invoice amount (MK)</label>
+  <input id="invoice" type="number" step="0.01" min="0" placeholder="Enter the invoice amount" />
+
+  <label for="selector">What is included in the invoice amount? (choose one)</label>
+  <select id="selector">
+    <option value="1">1. VAT only</option>
+    <option value="2">2. PPDA only (Assuming VAT is not applicable)</option>
+    <option value="3">3. VAT and PPDA</option>
+    <option value="4">4. VAT, PPDA and NCIC</option>
+    <option value="5">5. VAT and Tourism Levy</option>
+    <option value="6">6. VAT, PPDA and Tourism Levy</option>
+    <option value="7">7. none of the above</option>
+  </select>
+
+  <label for="wht">WHT rate (percentage)</label>
+  <input id="wht" type="number" step="0.01" min="0" placeholder="e.g., 10 for 10%" />
+
+  <div style="display:flex; gap:12px; margin-top:12px;">
+    <button id="calculate">Calculate</button>
+    <button id="reset" type="button">Reset</button>
+  </div>
+
+  <div id="error" class="error" role="alert" aria-live="polite"></div>
+
+  <div id="results" class="results" aria-live="polite" style="display:none;">
+    <div class="line"><span class="label">VAT amount:</span> <span id="out-vat" class="value"></span></div>
+    <div class="line"><span class="label">PPDA amount:</span> <span id="out-ppda" class="value"></span></div>
+    <div class="line"><span class="label">NCIC amount:</span> <span id="out-ncic" class="value"></span></div>
+    <div class="line"><span class="label">Tourism Levy amount:</span> <span id="out-tourism" class="value"></span></div>
+    <div class="line"><span class="label">Price taxable for WHT:</span> <span id="out-taxable" class="value"></span></div>
+    <div class="line"><span class="label">MRA WHT amount:</span> <span id="out-wht" class="value"></span></div>
+    <div class="line"><span class="label">Please pay the customer:</span> <span id="out-pay" class="value"></span></div>
+  </div>
+
+  <script>
+    (function () {
+      const VAT_RATE = 0.175;
+      const PPDA_RATE = 0.01;
+      const NCIC_RATE = 0.01;
+      const TOURISM_RATE = 0.01;
+
+      const $invoice = document.getElementById('invoice');
+      const $selector = document.getElementById('selector');
+      const $wht = document.getElementById('wht');
+      const $calculate = document.getElementById('calculate');
+      const $reset = document.getElementById('reset');
+      const $results = document.getElementById('results');
+      const $error = document.getElementById('error');
+
+      const out = {
+        vat: document.getElementById('out-vat'),
+        ppda: document.getElementById('out-ppda'),
+        ncic: document.getElementById('out-ncic'),
+        tourism: document.getElementById('out-tourism'),
+        taxable: document.getElementById('out-taxable'),
+        wht: document.getElementById('out-wht'),
+        pay: document.getElementById('out-pay')
+      };
+
+      function mk(amount) {
+        return 'MK' + Number(amount || 0).toFixed(2);
+      }
+
+      function clearOutputs() {
+        out.vat.textContent = '';
+        out.ppda.textContent = '';
+        out.ncic.textContent = '';
+        out.tourism.textContent = '';
+        out.taxable.textContent = '';
+        out.wht.textContent = '';
+        out.pay.textContent = '';
+      }
+
+      $calculate.addEventListener('click', function () {
+        $error.textContent = '';
+        $results.style.display = 'none';
+        clearOutputs();
+
+        const invoice = parseFloat($invoice.value);
+        const sel = parseInt($selector.value, 10);
+        const whtRateInput = parseFloat($wht.value);
+
+        if (isNaN(invoice) || invoice < 0) {
+          $error.textContent = 'Please enter a valid invoice amount.';
+          return;
+        }
+        if (isNaN(whtRateInput) || whtRateInput < 0) {
+          $error.textContent = 'Please enter a valid WHT rate (percentage).';
+          return;
+        }
+
+        const whtRate = whtRateInput / 100;
+
+        // initialize amounts
+        let vatAmount = 0;
+        let ppdaAmount = 0;
+        let ncicAmount = 0;
+        let tourismAmount = 0;
+        let priceTaxableForWHT = 0;
+        let whtAmount = 0;
+        let payCustomer = 0;
+
+        switch (sel) {
+          case 1: // VAT only (invoice is VAT inclusive)
+            // VAT portion of an inclusive price = invoice * VAT / (1 + VAT)
+            vatAmount = invoice * VAT_RATE / (1 + VAT_RATE);
+            priceTaxableForWHT = invoice - vatAmount;
+            whtAmount = priceTaxableForWHT * whtRate;
+            payCustomer = invoice - whtAmount;
+            break;
+
+          case 2: // PPDA only (invoice is PPDA inclusive)
+            ppdaAmount = invoice * PPDA_RATE / (1 + PPDA_RATE);
+            priceTaxableForWHT = invoice - ppdaAmount;
+            whtAmount = priceTaxableForWHT * whtRate;
+            payCustomer = invoice - whtAmount;
+            break;
+
+          case 3: // VAT and PPDA (both included)
+            // If invoice includes both, find base price: invoice / (1 + VAT + PPDA)
+            priceTaxableForWHT = invoice / (1 + VAT_RATE + PPDA_RATE);
+            vatAmount = priceTaxableForWHT * VAT_RATE;
+            ppdaAmount = priceTaxableForWHT * PPDA_RATE;
+            whtAmount = priceTaxableForWHT * whtRate;
+            payCustomer = invoice - whtAmount - ppdaAmount;
+            break;
+
+          case 4: // VAT, PPDA and NCIC
+            priceTaxableForWHT = invoice / (1 + VAT_RATE + PPDA_RATE + NCIC_RATE);
+            vatAmount = priceTaxableForWHT * VAT_RATE;
+            ppdaAmount = priceTaxableForWHT * PPDA_RATE;
+            ncicAmount = priceTaxableForWHT * NCIC_RATE;
+            whtAmount = priceTaxableForWHT * whtRate;
+            payCustomer = invoice - whtAmount - ppdaAmount - ncicAmount;
+            break;
+
+          case 5: // VAT and Tourism Levy
+            priceTaxableForWHT = invoice / (1 + VAT_RATE + TOURISM_RATE);
+            vatAmount = priceTaxableForWHT * VAT_RATE;
+            tourismAmount = priceTaxableForWHT * TOURISM_RATE;
+            whtAmount = priceTaxableForWHT * whtRate;
+            payCustomer = invoice - whtAmount;
+            break;
+
+          case 6: // VAT, PPDA and Tourism Levy
+            priceTaxableForWHT = invoice / (1 + VAT_RATE + PPDA_RATE + TOURISM_RATE);
+            vatAmount = priceTaxableForWHT * VAT_RATE;
+            ppdaAmount = priceTaxableForWHT * PPDA_RATE;
+            tourismAmount = priceTaxableForWHT * TOURISM_RATE;
+            whtAmount = priceTaxableForWHT * whtRate;
+            payCustomer = invoice - whtAmount - ppdaAmount;
+            break;
+
+          case 7: // none of the above (invoice is exclusive of levies)
+            // Show what the levies would be if applied, but invoice is exclusive so WHT is applied on invoice
+            priceTaxableForWHT = invoice;
+            whtAmount = invoice * whtRate;
+            // show hypothetical amounts (not included in invoice)
+            ppdaAmount = invoice * PPDA_RATE;
+            vatAmount = invoice * VAT_RATE;
+            //tourismAmount = invoice * TOURISM_RATE;
+            //ncicAmount = invoice * NCIC_RATE;
+            payCustomer = invoice - whtAmount + vatAmount;
+            break;
+
+          default:
+            $error.textContent = 'Invalid selection. Please choose a valid option.';
+            return;
+        }
+
+        // Display results
+        out.vat.textContent = mk(vatAmount);
+        out.ppda.textContent = mk(ppdaAmount);
+        out.ncic.textContent = mk(ncicAmount);
+        out.tourism.textContent = mk(tourismAmount);
+        out.taxable.textContent = mk(priceTaxableForWHT);
+        out.wht.textContent = mk(whtAmount);
+        out.pay.textContent = mk(payCustomer);
+
+        $results.style.display = 'block';
+      });
+
+      $reset.addEventListener('click', function () {
+        $invoice.value = '';
+        $wht.value = '';
+        $selector.value = '1';
+        $error.textContent = '';
+        $results.style.display = 'none';
+        clearOutputs();
+      });
+    })();
+  </script>
+</body>
+</html>
